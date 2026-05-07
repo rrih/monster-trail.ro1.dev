@@ -1,17 +1,17 @@
 "use client";
 
-import { FormEvent, useEffect, useMemo, useState } from "react";
+import { FormEvent, KeyboardEvent, useEffect, useMemo, useState } from "react";
 
 type Element = "leaf" | "spark" | "tide" | "stone" | "shade" | "flare";
+type Phase = "intro" | "starter" | "overworld" | "battle" | "hall";
+type Direction = "up" | "down" | "left" | "right";
 type BattleKind = "wild" | "rival" | "leader" | "league";
-type Phase = "intro" | "starter" | "field" | "battle" | "hall";
 
 type Species = {
   id: string;
   name: string;
   element: Element;
-  icon: string;
-  color: string;
+  mark: string;
   moveA: string;
   moveB: string;
   base: {
@@ -27,55 +27,56 @@ type Monster = Species["base"] & {
   speciesId: string;
   name: string;
   element: Element;
-  icon: string;
-  color: string;
+  mark: string;
   level: number;
   xp: number;
-  maxHp: number;
   hp: number;
+  maxHp: number;
   moveA: string;
   moveB: string;
 };
 
-type Location = {
-  name: string;
-  area: string;
-  story: string;
+type Chapter = {
+  town: string;
+  route: string;
+  leader: string;
+  badge: string;
   wild: string[];
-  leader: {
-    name: string;
-    title: string;
-    badge: string;
-    team: Array<[string, number]>;
-  };
+  team: Array<[string, number]>;
+  map: string[];
+  start: { x: number; y: number };
 };
 
 type Battle = {
   kind: BattleKind;
   title: string;
-  opponentName: string;
+  opponent: string;
   team: Monster[];
   active: number;
-  log: string[];
+  canCatch: boolean;
   rewardBadge?: string;
-  locationIndex?: number;
-  canCapture: boolean;
+  chapterIndex?: number;
+  log: string[];
 };
 
 type GameState = {
   phase: Phase;
   playerName: string;
   rivalName: string;
+  chapterIndex: number;
+  x: number;
+  y: number;
+  dir: Direction;
   party: Monster[];
   box: Monster[];
-  locationIndex: number;
   badges: string[];
   defeated: string[];
   leagueStep: number;
-  potions: number;
-  orbs: number;
-  journal: string[];
+  tonics: number;
+  capsules: number;
   battle: Battle | null;
+  message: string;
+  menuOpen: boolean;
 };
 
 const species: Record<string, Species> = {
@@ -83,89 +84,80 @@ const species: Record<string, Species> = {
     id: "spriglow",
     name: "Spriglow",
     element: "leaf",
-    icon: "✦",
-    color: "#48a868",
-    moveA: "Vine Tap",
-    moveB: "Green Pulse",
-    base: { hp: 28, attack: 8, defense: 7, speed: 7 },
+    mark: "L",
+    moveA: "Leaf Jab",
+    moveB: "Root Bind",
+    base: { hp: 28, attack: 8, defense: 8, speed: 6 },
   },
   emberlynx: {
     id: "emberlynx",
     name: "Emberlynx",
     element: "flare",
-    icon: "◆",
-    color: "#d85b3f",
-    moveA: "Cinder Paw",
-    moveB: "Heat Arc",
-    base: { hp: 26, attack: 10, defense: 5, speed: 8 },
+    mark: "F",
+    moveA: "Coal Paw",
+    moveB: "Heat Rush",
+    base: { hp: 26, attack: 10, defense: 6, speed: 8 },
   },
   puddlefin: {
     id: "puddlefin",
     name: "Puddlefin",
     element: "tide",
-    icon: "●",
-    color: "#3b8fc8",
-    moveA: "Bubble Jab",
-    moveB: "Tide Ring",
-    base: { hp: 30, attack: 7, defense: 8, speed: 6 },
+    mark: "T",
+    moveA: "Foam Hit",
+    moveB: "Tide Turn",
+    base: { hp: 30, attack: 7, defense: 9, speed: 6 },
   },
   mosskip: {
     id: "mosskip",
     name: "Mosskip",
     element: "leaf",
-    icon: "▲",
-    color: "#6eb24f",
-    moveA: "Leaf Flick",
-    moveB: "Root Snare",
-    base: { hp: 22, attack: 6, defense: 5, speed: 9 },
+    mark: "M",
+    moveA: "Stem Tap",
+    moveB: "Green Guard",
+    base: { hp: 22, attack: 6, defense: 6, speed: 9 },
   },
   zaplet: {
     id: "zaplet",
     name: "Zaplet",
     element: "spark",
-    icon: "⚡",
-    color: "#d1a923",
-    moveA: "Static Peck",
-    moveB: "Volt Skip",
-    base: { hp: 20, attack: 8, defense: 4, speed: 11 },
+    mark: "Z",
+    moveA: "Static Nip",
+    moveB: "Volt Step",
+    base: { hp: 21, attack: 8, defense: 5, speed: 11 },
   },
   shello: {
     id: "shello",
     name: "Shello",
     element: "tide",
-    icon: "◐",
-    color: "#4d9cbd",
-    moveA: "Shell Bump",
-    moveB: "Foam Guard",
-    base: { hp: 27, attack: 6, defense: 9, speed: 4 },
+    mark: "S",
+    moveA: "Shell Knock",
+    moveB: "Foam Wall",
+    base: { hp: 27, attack: 6, defense: 10, speed: 4 },
   },
   pebblit: {
     id: "pebblit",
     name: "Pebblit",
     element: "stone",
-    icon: "⬟",
-    color: "#887861",
-    moveA: "Gravel Hit",
-    moveB: "Iron Curl",
-    base: { hp: 25, attack: 8, defense: 10, speed: 3 },
+    mark: "P",
+    moveA: "Pebble Toss",
+    moveB: "Stone Curl",
+    base: { hp: 26, attack: 9, defense: 11, speed: 3 },
   },
   duskid: {
     id: "duskid",
     name: "Duskid",
     element: "shade",
-    icon: "☾",
-    color: "#67538c",
-    moveA: "Night Tap",
-    moveB: "Mute Wave",
+    mark: "D",
+    moveA: "Dim Tap",
+    moveB: "Quiet Wave",
     base: { hp: 24, attack: 9, defense: 5, speed: 8 },
   },
   flamite: {
     id: "flamite",
     name: "Flamite",
     element: "flare",
-    icon: "◇",
-    color: "#c84e2f",
-    moveA: "Coal Bite",
+    mark: "A",
+    moveA: "Ash Bite",
     moveB: "Flare Hop",
     base: { hp: 23, attack: 9, defense: 5, speed: 7 },
   },
@@ -173,9 +165,8 @@ const species: Record<string, Species> = {
     id: "crystowl",
     name: "Crystowl",
     element: "spark",
-    icon: "✧",
-    color: "#6aa7d9",
-    moveA: "Prism Wing",
+    mark: "C",
+    moveA: "Glass Wing",
     moveB: "Bright Bolt",
     base: { hp: 29, attack: 10, defense: 8, speed: 10 },
   },
@@ -183,200 +174,199 @@ const species: Record<string, Species> = {
     id: "brambleox",
     name: "Brambleox",
     element: "leaf",
-    icon: "■",
-    color: "#497f3f",
+    mark: "B",
     moveA: "Horn Vine",
     moveB: "Forest Wall",
-    base: { hp: 36, attack: 11, defense: 11, speed: 4 },
+    base: { hp: 36, attack: 11, defense: 12, speed: 4 },
   },
   vulterm: {
     id: "vulterm",
     name: "Vulterm",
     element: "flare",
-    icon: "◈",
-    color: "#a73f2b",
+    mark: "V",
     moveA: "Magma Lift",
     moveB: "Ash Crash",
     base: { hp: 34, attack: 13, defense: 9, speed: 7 },
   },
 };
 
-const starters = ["spriglow", "emberlynx", "puddlefin"];
+const starterIds = ["spriglow", "emberlynx", "puddlefin"];
 
-const locations: Location[] = [
+const baseMap = [
+  "TTTTTTTTTTTT",
+  "T...GGG..L.T",
+  "T.GGGGG....T",
+  "T..TT..GG..T",
+  "T..T...GG..T",
+  "T..T.......T",
+  "T..D..N....T",
+  "T..........E",
+  "TTTTTTTTTTTT",
+];
+
+const chapters: Chapter[] = [
   {
-    name: "Dawnfield",
-    area: "North Meadow",
-    story: "Lumen Lab sends you across the meadow to test the new Field Index. A quiet rival appears at the fence line.",
+    town: "Hometown",
+    route: "Route 1",
+    leader: "Mira",
+    badge: "Seed Badge",
     wild: ["mosskip", "zaplet", "shello"],
-    leader: {
-      name: "Mira",
-      title: "Meadow Warden",
-      badge: "Seed Sigil",
-      team: [["mosskip", 6], ["spriglow", 7]],
-    },
+    team: [["mosskip", 6], ["spriglow", 7]],
+    map: baseMap,
+    start: { x: 2, y: 6 },
   },
   {
-    name: "Harborvein",
-    area: "Old Pier",
-    story: "Sailors report restless lights below the planks. Your index records a new tide pattern.",
+    town: "Harbor Town",
+    route: "Route 2",
+    leader: "Rowan",
+    badge: "Foam Badge",
     wild: ["shello", "puddlefin", "zaplet"],
-    leader: {
-      name: "Rowan",
-      title: "Pier Captain",
-      badge: "Foam Sigil",
-      team: [["shello", 9], ["puddlefin", 10]],
-    },
+    team: [["shello", 9], ["puddlefin", 10]],
+    map: baseMap,
+    start: { x: 2, y: 6 },
   },
   {
-    name: "Coppercut",
-    area: "Quarry Road",
-    story: "The road climbs through stone walls, and every echo sounds like a challenge.",
+    town: "Quarry Town",
+    route: "Route 3",
+    leader: "Gant",
+    badge: "Stone Badge",
     wild: ["pebblit", "mosskip", "duskid"],
-    leader: {
-      name: "Gant",
-      title: "Quarry Keeper",
-      badge: "Granite Sigil",
-      team: [["pebblit", 12], ["brambleox", 13]],
-    },
+    team: [["pebblit", 12], ["brambleox", 13]],
+    map: baseMap,
+    start: { x: 2, y: 6 },
   },
   {
-    name: "Nightmarket",
-    area: "Lamp Alley",
-    story: "Under the lanterns, your rival admits they are chasing the same league letter.",
+    town: "Lamp Town",
+    route: "Route 4",
+    leader: "Noa",
+    badge: "Moon Badge",
     wild: ["duskid", "zaplet", "flamite"],
-    leader: {
-      name: "Noa",
-      title: "Lantern Duelist",
-      badge: "Moon Sigil",
-      team: [["duskid", 15], ["crystowl", 16]],
-    },
+    team: [["duskid", 15], ["crystowl", 16]],
+    map: baseMap,
+    start: { x: 2, y: 6 },
   },
   {
-    name: "Glassfen",
-    area: "Mirror Marsh",
-    story: "Reflections in the marsh copy your steps. Only a steady team can cross.",
+    town: "Marsh Town",
+    route: "Route 5",
+    leader: "Iris",
+    badge: "Prism Badge",
     wild: ["puddlefin", "shello", "crystowl"],
-    leader: {
-      name: "Iris",
-      title: "Marsh Curator",
-      badge: "Prism Sigil",
-      team: [["crystowl", 18], ["puddlefin", 19]],
-    },
+    team: [["crystowl", 18], ["puddlefin", 19]],
+    map: baseMap,
+    start: { x: 2, y: 6 },
   },
   {
-    name: "Cinderpass",
-    area: "Warm Ridge",
-    story: "The mountain path glows after sunset. The league gate is finally visible.",
+    town: "Cinder Town",
+    route: "Route 6",
+    leader: "Vale",
+    badge: "Coal Badge",
     wild: ["flamite", "pebblit", "vulterm"],
-    leader: {
-      name: "Vale",
-      title: "Ridge Guard",
-      badge: "Coal Sigil",
-      team: [["flamite", 21], ["vulterm", 22]],
-    },
+    team: [["flamite", 21], ["vulterm", 22]],
+    map: baseMap,
+    start: { x: 2, y: 6 },
   },
   {
-    name: "Windspire",
-    area: "High Tower",
-    story: "A tower above the clouds tests speed, patience, and clean switching.",
+    town: "Tower Town",
+    route: "Route 7",
+    leader: "Sera",
+    badge: "Gale Badge",
     wild: ["zaplet", "crystowl", "duskid"],
-    leader: {
-      name: "Sera",
-      title: "Tower Ace",
-      badge: "Gale Sigil",
-      team: [["zaplet", 24], ["crystowl", 25]],
-    },
+    team: [["zaplet", 24], ["crystowl", 25]],
+    map: baseMap,
+    start: { x: 2, y: 6 },
   },
   {
-    name: "Crownroot",
-    area: "League Gate",
-    story: "With the gate in sight, your rival asks for one final proof before the summit.",
+    town: "Gate Town",
+    route: "Route 8",
+    leader: "Orin",
+    badge: "Crown Badge",
     wild: ["brambleox", "vulterm", "crystowl"],
-    leader: {
-      name: "Orin",
-      title: "Gate Founder",
-      badge: "Crown Sigil",
-      team: [["brambleox", 27], ["vulterm", 28], ["crystowl", 28]],
-    },
+    team: [["brambleox", 27], ["vulterm", 28], ["crystowl", 28]],
+    map: baseMap,
+    start: { x: 2, y: 6 },
   },
 ];
 
 const league = [
-  {
-    name: "Aster",
-    title: "First Star",
-    team: [["shello", 30], ["puddlefin", 31], ["crystowl", 32]],
-  },
-  {
-    name: "Basalt",
-    title: "Second Star",
-    team: [["pebblit", 32], ["brambleox", 33], ["vulterm", 34]],
-  },
-  {
-    name: "Nyx",
-    title: "Third Star",
-    team: [["duskid", 34], ["crystowl", 35], ["duskid", 36]],
-  },
-  {
-    name: "Sol",
-    title: "Fourth Star",
-    team: [["flamite", 36], ["vulterm", 37], ["emberlynx", 38]],
-  },
-  {
-    name: "Champion",
-    title: "Summit Holder",
-    team: [["spriglow", 39], ["puddlefin", 39], ["emberlynx", 40], ["crystowl", 41]],
-  },
+  { name: "Aster", title: "League One", team: [["shello", 30], ["puddlefin", 31], ["crystowl", 32]] },
+  { name: "Basalt", title: "League Two", team: [["pebblit", 32], ["brambleox", 33], ["vulterm", 34]] },
+  { name: "Nyx", title: "League Three", team: [["duskid", 34], ["crystowl", 35], ["duskid", 36]] },
+  { name: "Sol", title: "League Four", team: [["flamite", 36], ["vulterm", 37], ["emberlynx", 38]] },
+  { name: "Ren", title: "Champion", team: [["spriglow", 39], ["puddlefin", 39], ["emberlynx", 40], ["crystowl", 41]] },
 ] as const;
 
 const initialState: GameState = {
   phase: "intro",
   playerName: "",
-  rivalName: "Kai",
+  rivalName: "Ren",
+  chapterIndex: 0,
+  x: chapters[0].start.x,
+  y: chapters[0].start.y,
+  dir: "down",
   party: [],
   box: [],
-  locationIndex: 0,
   badges: [],
   defeated: [],
   leagueStep: 0,
-  potions: 4,
-  orbs: 8,
-  journal: ["The Field Index is waiting for a trainer name."],
+  tonics: 3,
+  capsules: 8,
   battle: null,
+  message: "A professor is waiting in the lab.",
+  menuOpen: false,
 };
 
 function makeMonster(speciesId: string, level: number): Monster {
   const template = species[speciesId];
-  const hp = template.base.hp + level * 4;
+  const maxHp = template.base.hp + level * 4;
   return {
-    uid: `${speciesId}-${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    uid: `${speciesId}-${level}-${Math.random().toString(16).slice(2)}`,
     speciesId,
     name: template.name,
     element: template.element,
-    icon: template.icon,
-    color: template.color,
+    mark: template.mark,
+    moveA: template.moveA,
+    moveB: template.moveB,
     level,
     xp: 0,
-    hp,
-    maxHp: hp,
+    maxHp,
+    hp: maxHp,
     attack: template.base.attack + level * 2,
     defense: template.base.defense + level,
     speed: template.base.speed + level,
-    moveA: template.moveA,
-    moveB: template.moveB,
   };
 }
 
+function loadInitialState() {
+  if (typeof window === "undefined") return initialState;
+  const saved = window.localStorage.getItem("monster-trail-save-v2");
+  if (!saved) return initialState;
+  try {
+    return JSON.parse(saved) as GameState;
+  } catch {
+    window.localStorage.removeItem("monster-trail-save-v2");
+    return initialState;
+  }
+}
+
+function hpPercent(monster: Monster) {
+  return `${Math.max(0, Math.round((monster.hp / monster.maxHp) * 100))}%`;
+}
+
+function livingIndex(team: Monster[]) {
+  return team.findIndex((monster) => monster.hp > 0);
+}
+
+function healParty(party: Monster[]) {
+  return party.map((monster) => ({ ...monster, hp: monster.maxHp }));
+}
+
 function levelUp(monster: Monster): Monster {
-  const nextLevel = monster.level + 1;
-  const hpGain = 4 + (nextLevel % 3);
   return {
     ...monster,
-    level: nextLevel,
+    level: monster.level + 1,
     xp: 0,
-    maxHp: monster.maxHp + hpGain,
-    hp: monster.maxHp + hpGain,
+    maxHp: monster.maxHp + 5,
+    hp: monster.maxHp + 5,
     attack: monster.attack + 2,
     defense: monster.defense + 1,
     speed: monster.speed + 1,
@@ -398,42 +388,31 @@ function elementBonus(attacker: Element, defender: Element) {
 }
 
 function damage(attacker: Monster, defender: Monster, heavy = false) {
-  const move = heavy ? 1.25 : 1;
-  const variance = 0.88 + Math.random() * 0.24;
-  const raw = (attacker.attack * move + attacker.level * 1.8 - defender.defense * 0.65) * elementBonus(attacker.element, defender.element);
-  return Math.max(3, Math.round(raw * variance));
+  const raw = (attacker.attack * (heavy ? 1.28 : 1) + attacker.level * 2 - defender.defense * 0.7) * elementBonus(attacker.element, defender.element);
+  const roll = 0.88 + Math.random() * 0.24;
+  return Math.max(3, Math.round(raw * roll));
 }
 
-function healParty(party: Monster[]) {
-  return party.map((monster) => ({ ...monster, hp: monster.maxHp }));
+function classForTile(tile: string) {
+  if (tile === "T") return "tree";
+  if (tile === "G") return "grass";
+  if (tile === "L") return "leader";
+  if (tile === "D") return "door";
+  if (tile === "N") return "npc";
+  if (tile === "E") return "exit";
+  return "path";
 }
 
-function livingIndex(team: Monster[]) {
-  return team.findIndex((monster) => monster.hp > 0);
+function nextPoint(x: number, y: number, dir: Direction) {
+  if (dir === "up") return { x, y: y - 1 };
+  if (dir === "down") return { x, y: y + 1 };
+  if (dir === "left") return { x: x - 1, y };
+  return { x: x + 1, y };
 }
 
-function hpPercent(monster: Monster) {
-  return `${Math.max(0, Math.round((monster.hp / monster.maxHp) * 100))}%`;
-}
-
-function loadInitialState() {
-  if (typeof window === "undefined") return initialState;
-  const saved = window.localStorage.getItem("monster-trail-save");
-  if (!saved) return initialState;
-  try {
-    return JSON.parse(saved) as GameState;
-  } catch {
-    window.localStorage.removeItem("monster-trail-save");
-    return initialState;
-  }
-}
-
-function rivalTeam(locationIndex: number) {
-  const level = Math.max(5, locationIndex * 3 + 6);
-  return [
-    makeMonster("zaplet", level),
-    makeMonster(locationIndex > 3 ? "duskid" : "mosskip", level + 1),
-  ];
+function rivalTeam(chapterIndex: number) {
+  const level = Math.max(5, chapterIndex * 3 + 7);
+  return [makeMonster("zaplet", level), makeMonster(chapterIndex > 3 ? "duskid" : "mosskip", level + 1)];
 }
 
 export default function Home() {
@@ -441,34 +420,38 @@ export default function Home() {
   const [nameInput, setNameInput] = useState("");
 
   useEffect(() => {
-    window.localStorage.setItem("monster-trail-save", JSON.stringify(state));
+    window.localStorage.setItem("monster-trail-save-v2", JSON.stringify(state));
   }, [state]);
 
+  const chapter = chapters[state.chapterIndex] ?? chapters[chapters.length - 1];
   const active = useMemo(() => state.party.find((monster) => monster.hp > 0) ?? state.party[0], [state.party]);
-  const current = locations[state.locationIndex] ?? locations[locations.length - 1];
-  const hasLeaderDown = state.defeated.includes(`leader-${state.locationIndex}`);
-  const canLeague = state.badges.length >= locations.length;
+  const leaderDown = state.defeated.includes(`leader-${state.chapterIndex}`);
+  const allBadges = state.badges.length >= chapters.length;
 
-  function beginJourney(event: FormEvent<HTMLFormElement>) {
+  function begin(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const trimmed = nameInput.trim().slice(0, 12);
-    if (!trimmed) return;
-    setState((game) => ({
-      ...game,
+    const name = nameInput.trim().slice(0, 10);
+    if (!name) return;
+    setState({
+      ...initialState,
       phase: "starter",
-      playerName: trimmed,
-      journal: [`Dr. Lumen registered ${trimmed} as the newest Field Index holder.`, ...game.journal],
-    }));
+      playerName: name,
+      message: `PROF. LARCH: ${name}, your record begins today. Pick one partner from the table.`,
+    });
   }
 
   function chooseStarter(speciesId: string) {
     const starter = makeMonster(speciesId, 5);
     setState((game) => ({
       ...game,
-      phase: "field",
+      phase: "overworld",
       party: [starter],
-      journal: [`${starter.name} joined ${game.playerName}. The first trail opened toward Dawnfield.`, ...game.journal],
+      message: `${starter.name} joined you. ${game.rivalName} took another capsule and ran ahead.`,
     }));
+  }
+
+  function tileAt(ch: Chapter, x: number, y: number) {
+    return ch.map[y]?.[x] ?? "T";
   }
 
   function startBattle(battle: Battle) {
@@ -477,253 +460,313 @@ export default function Home() {
       phase: "battle",
       party: healParty(game.party),
       battle,
+      menuOpen: false,
     }));
   }
 
-  function startWildBattle() {
-    const pool = current.wild;
-    const chosen = pool[Math.floor(Math.random() * pool.length)];
-    const level = Math.max(4, state.locationIndex * 3 + 4 + Math.floor(Math.random() * 3));
-    const wild = makeMonster(chosen, level);
+  function startWild(chapterIndex = state.chapterIndex) {
+    const ch = chapters[chapterIndex];
+    const id = ch.wild[Math.floor(Math.random() * ch.wild.length)];
+    const wild = makeMonster(id, Math.max(3, chapterIndex * 3 + 4 + Math.floor(Math.random() * 3)));
     startBattle({
       kind: "wild",
-      title: `${current.area} encounter`,
-      opponentName: "Wild signal",
+      title: `${ch.route}`,
+      opponent: "Wild",
       team: [wild],
       active: 0,
-      canCapture: true,
-      locationIndex: state.locationIndex,
-      log: [`A wild ${wild.name} stepped from the trail.`],
+      canCatch: true,
+      chapterIndex,
+      log: [`Wild ${wild.name} appeared.`],
     });
   }
 
-  function startRivalBattle() {
-    startBattle({
-      kind: "rival",
-      title: "Rival challenge",
-      opponentName: state.rivalName,
-      team: rivalTeam(state.locationIndex),
-      active: 0,
-      canCapture: false,
-      locationIndex: state.locationIndex,
-      log: [`${state.rivalName} blocks the path and asks for a clean match.`],
-    });
-  }
-
-  function startLeaderBattle() {
+  function startLeader() {
     startBattle({
       kind: "leader",
-      title: current.leader.title,
-      opponentName: current.leader.name,
-      team: current.leader.team.map(([id, level]) => makeMonster(id, level)),
+      title: `${chapter.town} Badge Match`,
+      opponent: chapter.leader,
+      team: chapter.team.map(([id, level]) => makeMonster(id, level)),
       active: 0,
-      canCapture: false,
-      rewardBadge: current.leader.badge,
-      locationIndex: state.locationIndex,
-      log: [`${current.leader.name}, ${current.leader.title}, accepts your challenge.`],
+      canCatch: false,
+      rewardBadge: chapter.badge,
+      chapterIndex: state.chapterIndex,
+      log: [`${chapter.leader}: Show me your trained team.`],
     });
   }
 
-  function startLeagueBattle() {
+  function startRival() {
+    startBattle({
+      kind: "rival",
+      title: "Rival Battle",
+      opponent: state.rivalName,
+      team: rivalTeam(state.chapterIndex),
+      active: 0,
+      canCatch: false,
+      chapterIndex: state.chapterIndex,
+      log: [`${state.rivalName}: I was waiting. Let's compare teams.`],
+    });
+  }
+
+  function startLeague() {
     const opponent = league[state.leagueStep];
     startBattle({
       kind: "league",
       title: opponent.title,
-      opponentName: opponent.name,
+      opponent: opponent.name,
       team: opponent.team.map(([id, level]) => makeMonster(id, level)),
       active: 0,
-      canCapture: false,
-      log: [`${opponent.name}, ${opponent.title}, steps into the summit arena.`],
+      canCatch: false,
+      log: [`${opponent.name} stepped into the league room.`],
+    });
+  }
+
+  function move(dir: Direction) {
+    setState((game) => {
+      if (game.phase !== "overworld") return { ...game, dir };
+      const ch = chapters[game.chapterIndex];
+      const point = nextPoint(game.x, game.y, dir);
+      const tile = tileAt(ch, point.x, point.y);
+      if (tile === "T") return { ...game, dir, message: "The way is blocked." };
+      if (tile === "E") {
+        if (!game.defeated.includes(`leader-${game.chapterIndex}`)) {
+          return { ...game, dir, message: `${ch.leader} still holds this town's badge.` };
+        }
+        if (game.chapterIndex >= chapters.length - 1) {
+          return { ...game, x: point.x, y: point.y, dir, message: "A guard checks for eight badges. Press A to enter the league." };
+        }
+        const nextChapter = chapters[game.chapterIndex + 1];
+        return {
+          ...game,
+          chapterIndex: game.chapterIndex + 1,
+          x: nextChapter.start.x,
+          y: nextChapter.start.y,
+          dir: "down",
+          party: healParty(game.party),
+          message: `You reached ${nextChapter.town}.`,
+        };
+      }
+      if (tile === "G" && game.party.length > 0 && Math.random() < 0.2) {
+        const id = ch.wild[Math.floor(Math.random() * ch.wild.length)];
+        const wild = makeMonster(id, Math.max(3, game.chapterIndex * 3 + 4 + Math.floor(Math.random() * 3)));
+        return {
+          ...game,
+          x: point.x,
+          y: point.y,
+          dir,
+          phase: "battle",
+          party: healParty(game.party),
+          battle: {
+            kind: "wild",
+            title: ch.route,
+            opponent: "Wild",
+            team: [wild],
+            active: 0,
+            canCatch: true,
+            chapterIndex: game.chapterIndex,
+            log: [`Wild ${wild.name} appeared.`],
+          },
+        };
+      }
+      return { ...game, x: point.x, y: point.y, dir, message: tile === "G" ? "Tall grass rustles." : game.message };
+    });
+  }
+
+  function interact() {
+    setState((game) => {
+      if (game.phase !== "overworld") return game;
+      const ch = chapters[game.chapterIndex];
+      const front = nextPoint(game.x, game.y, game.dir);
+      const tile = tileAt(ch, front.x, front.y);
+      if (tile === "D") {
+        return {
+          ...game,
+          party: healParty(game.party),
+          tonics: game.tonics + 1,
+          message: "You rested at the local lab counter. Team HP restored. Got 1 tonic.",
+        };
+      }
+      if (tile === "N") {
+        return { ...game, message: `${game.rivalName}: Badges open roads. Beat the local leader, then go east.` };
+      }
+      if (tile === "L") {
+        if (game.defeated.includes(`leader-${game.chapterIndex}`)) return { ...game, message: `${ch.leader}: Your ${ch.badge} is proof enough.` };
+        const battle: Battle = {
+          kind: "leader",
+          title: `${ch.town} Badge Match`,
+          opponent: ch.leader,
+          team: ch.team.map(([id, level]) => makeMonster(id, level)),
+          active: 0,
+          canCatch: false,
+          rewardBadge: ch.badge,
+          chapterIndex: game.chapterIndex,
+          log: [`${ch.leader}: Show me your trained team.`],
+        };
+        return { ...game, phase: "battle", party: healParty(game.party), battle, menuOpen: false };
+      }
+      if (tile === "E" && game.chapterIndex >= chapters.length - 1) {
+        if (!allBadges) return { ...game, message: "The league guard asks for eight badges." };
+        const opponent = league[game.leagueStep];
+        return {
+          ...game,
+          phase: "battle",
+          party: healParty(game.party),
+          battle: {
+            kind: "league",
+            title: opponent.title,
+            opponent: opponent.name,
+            team: opponent.team.map(([id, level]) => makeMonster(id, level)),
+            active: 0,
+            canCatch: false,
+            log: [`${opponent.name} stepped into the league room.`],
+          },
+        };
+      }
+      return { ...game, message: "There is nothing to inspect here." };
     });
   }
 
   function finishWin(game: GameState, battle: Battle, party: Monster[], log: string[]): GameState {
-    let next = {
+    const healed = healParty(party);
+    let next: GameState = {
       ...game,
-      phase: "field" as Phase,
-      party: healParty(party),
+      phase: "overworld",
+      party: healed,
       battle: null,
-      potions: game.potions + (battle.kind === "wild" ? 0 : 1),
-      orbs: game.orbs + (battle.kind === "wild" ? 0 : 2),
-      journal: [`Won against ${battle.opponentName}.`, ...game.journal].slice(0, 8),
+      tonics: game.tonics + (battle.kind === "wild" ? 0 : 1),
+      capsules: game.capsules + (battle.kind === "wild" ? 0 : 2),
+      message: `You defeated ${battle.opponent}.`,
     };
-
     if (battle.kind === "leader" && battle.rewardBadge) {
-      const token = `leader-${battle.locationIndex ?? game.locationIndex}`;
+      const token = `leader-${battle.chapterIndex ?? game.chapterIndex}`;
       next = {
         ...next,
         badges: next.badges.includes(battle.rewardBadge) ? next.badges : [...next.badges, battle.rewardBadge],
         defeated: next.defeated.includes(token) ? next.defeated : [...next.defeated, token],
-        journal: [`Earned the ${battle.rewardBadge}.`, ...next.journal].slice(0, 8),
+        message: `${battle.opponent} awarded the ${battle.rewardBadge}. The road east opened.`,
       };
     }
-
     if (battle.kind === "league") {
       if (game.leagueStep >= league.length - 1) {
-        return {
-          ...next,
-          phase: "hall",
-          leagueStep: league.length,
-          journal: ["Entered the Hall of Memory as summit champion.", ...next.journal].slice(0, 8),
-        };
+        return { ...next, phase: "hall", leagueStep: league.length, message: "Your team entered the Hall of Records." };
       }
-      next = {
-        ...next,
-        leagueStep: game.leagueStep + 1,
-        journal: [`Cleared ${battle.opponentName}. The next summit door opened.`, ...next.journal].slice(0, 8),
-      };
+      next = { ...next, leagueStep: game.leagueStep + 1, message: `League room ${game.leagueStep + 1} cleared. Press League to continue.` };
     }
-
     return { ...next, battle: { ...battle, log } };
   }
 
   function handleAttack(heavy = false) {
     setState((game) => {
       if (!game.battle) return game;
-      const battle = game.battle;
       const playerIndex = livingIndex(game.party);
       if (playerIndex < 0) return game;
-      const opponent = battle.team[battle.active];
+      const battle = game.battle;
       const player = game.party[playerIndex];
-      const hit = damage(player, opponent, heavy);
-      const nextTeam = battle.team.map((monster, index) =>
-        index === battle.active ? { ...monster, hp: Math.max(0, monster.hp - hit) } : monster,
-      );
-      const log = [`${player.name} used ${heavy ? player.moveB : player.moveA} for ${hit}.`, ...battle.log].slice(0, 7);
-      const nextOpponentIndex = livingIndex(nextTeam);
-
-      let nextParty = game.party;
-      if (nextOpponentIndex < 0) {
-        nextParty = game.party.map((monster, index) => {
+      const foe = battle.team[battle.active];
+      const hit = damage(player, foe, heavy);
+      const nextTeam = battle.team.map((monster, index) => (index === battle.active ? { ...monster, hp: Math.max(0, monster.hp - hit) } : monster));
+      const log = [`${player.name} used ${heavy ? player.moveB : player.moveA}. ${hit} damage.`, ...battle.log].slice(0, 6);
+      const nextFoeIndex = livingIndex(nextTeam);
+      if (nextFoeIndex < 0) {
+        const nextParty = game.party.map((monster, index) => {
           if (index !== playerIndex) return monster;
-          const xp = monster.xp + opponent.level * 4 + (battle.kind === "wild" ? 4 : 8);
-          return xp >= 24 + monster.level * 2 ? levelUp({ ...monster, xp }) : { ...monster, xp };
+          const xp = monster.xp + foe.level * 5 + (battle.kind === "wild" ? 4 : 10);
+          return xp > 25 + monster.level * 2 ? levelUp({ ...monster, xp }) : { ...monster, xp };
         });
-        const leveled = nextParty[playerIndex].level > player.level ? [`${player.name} grew to level ${nextParty[playerIndex].level}.`] : [];
-        return finishWin(game, battle, nextParty, ["Victory.", ...leveled, ...log].slice(0, 7));
+        const leveled = nextParty[playerIndex].level > player.level ? [`${player.name} grew to Lv.${nextParty[playerIndex].level}.`] : [];
+        return finishWin(game, battle, nextParty, ["Enemy team fainted.", ...leveled, ...log].slice(0, 6));
       }
-
-      const activeOpponentIndex = nextTeam[battle.active].hp > 0 ? battle.active : nextOpponentIndex;
-      const counter = nextTeam[activeOpponentIndex];
+      const activeIndex = nextTeam[battle.active].hp > 0 ? battle.active : nextFoeIndex;
+      const counter = nextTeam[activeIndex];
       const back = damage(counter, player, false);
-      nextParty = game.party.map((monster, index) =>
-        index === playerIndex ? { ...monster, hp: Math.max(0, monster.hp - back) } : monster,
-      );
-      const afterPlayerIndex = livingIndex(nextParty);
-      const nextLog = [`${counter.name} answered with ${counter.moveA} for ${back}.`, ...log].slice(0, 7);
-
-      if (afterPlayerIndex < 0) {
+      const nextParty = game.party.map((monster, index) => (index === playerIndex ? { ...monster, hp: Math.max(0, monster.hp - back) } : monster));
+      if (livingIndex(nextParty) < 0) {
         return {
           ...game,
-          phase: "field",
+          phase: "overworld",
           party: healParty(nextParty),
-          potions: Math.max(1, game.potions),
           battle: null,
-          journal: [`Lost to ${battle.opponentName}, returned to the last safe camp.`, ...game.journal].slice(0, 8),
+          message: `You blacked out against ${battle.opponent}. The lab restored your team.`,
         };
       }
-
       return {
         ...game,
         party: nextParty,
         battle: {
           ...battle,
-          active: activeOpponentIndex,
           team: nextTeam,
-          log: nextLog,
+          active: activeIndex,
+          log: [`${counter.name} used ${counter.moveA}. ${back} damage.`, ...log].slice(0, 6),
         },
       };
     });
   }
 
-  function capture() {
+  function useTonic() {
     setState((game) => {
-      if (!game.battle || !game.battle.canCapture || game.orbs <= 0) return game;
+      if (!game.battle || game.tonics <= 0) return game;
+      const playerIndex = livingIndex(game.party);
+      if (playerIndex < 0) return game;
+      return {
+        ...game,
+        tonics: game.tonics - 1,
+        party: game.party.map((monster, index) => (index === playerIndex ? { ...monster, hp: Math.min(monster.maxHp, monster.hp + 30) } : monster)),
+        battle: { ...game.battle, log: [`Used a tonic on ${game.party[playerIndex].name}.`, ...game.battle.log].slice(0, 6) },
+      };
+    });
+  }
+
+  function throwCapsule() {
+    setState((game) => {
+      if (!game.battle || !game.battle.canCatch || game.capsules <= 0) return game;
       const target = game.battle.team[game.battle.active];
-      const lowHp = 1 - target.hp / target.maxHp;
-      const chance = 0.34 + lowHp * 0.55;
+      const chance = 0.3 + (1 - target.hp / target.maxHp) * 0.58;
       if (Math.random() < chance) {
-        const captured = { ...target, hp: target.maxHp };
-        const party = game.party.length < 6 ? [...game.party, captured] : game.party;
-        const box = game.party.length < 6 ? game.box : [...game.box, captured];
+        const caught = { ...target, hp: target.maxHp };
         return {
           ...game,
-          phase: "field",
-          party: healParty(party),
-          box,
-          orbs: game.orbs - 1,
+          phase: "overworld",
+          party: game.party.length < 6 ? healParty([...game.party, caught]) : healParty(game.party),
+          box: game.party.length < 6 ? game.box : [...game.box, caught],
+          capsules: game.capsules - 1,
           battle: null,
-          journal: [`Captured ${captured.name}.`, ...game.journal].slice(0, 8),
+          message: `${caught.name} was caught.`,
         };
       }
       return {
         ...game,
-        orbs: game.orbs - 1,
-        battle: {
-          ...game.battle,
-          log: [`The field orb shook, then opened.`, ...game.battle.log].slice(0, 7),
-        },
+        capsules: game.capsules - 1,
+        battle: { ...game.battle, log: ["The capsule clicked open. It failed.", ...game.battle.log].slice(0, 6) },
       };
     });
   }
 
-  function usePotion() {
-    setState((game) => {
-      if (!game.battle || game.potions <= 0) return game;
-      const index = livingIndex(game.party);
-      if (index < 0) return game;
-      const healed = game.party.map((monster, monsterIndex) =>
-        monsterIndex === index ? { ...monster, hp: Math.min(monster.maxHp, monster.hp + 28) } : monster,
-      );
-      return {
-        ...game,
-        party: healed,
-        potions: game.potions - 1,
-        battle: {
-          ...game.battle,
-          log: [`Used a trail tonic on ${game.party[index].name}.`, ...game.battle.log].slice(0, 7),
-        },
-      };
-    });
-  }
-
-  function moveNext() {
-    setState((game) => ({
-      ...game,
-      locationIndex: Math.min(locations.length - 1, game.locationIndex + 1),
-      party: healParty(game.party),
-      journal: [`Arrived at ${locations[Math.min(locations.length - 1, game.locationIndex + 1)].name}.`, ...game.journal].slice(0, 8),
-    }));
-  }
-
-  function resetGame() {
-    window.localStorage.removeItem("monster-trail-save");
+  function reset() {
+    window.localStorage.removeItem("monster-trail-save-v2");
     setState(initialState);
     setNameInput("");
   }
 
+  function onKeyDown(event: KeyboardEvent<HTMLElement>) {
+    if (event.key === "ArrowUp") move("up");
+    if (event.key === "ArrowDown") move("down");
+    if (event.key === "ArrowLeft") move("left");
+    if (event.key === "ArrowRight") move("right");
+    if (event.key.toLowerCase() === "z" || event.key === "Enter") interact();
+    if (event.key.toLowerCase() === "x") setState((game) => ({ ...game, menuOpen: !game.menuOpen }));
+  }
+
   if (state.phase === "intro") {
     return (
-      <main className="shell intro-screen">
-        <section className="screen-panel intro-panel">
-          <div className="professor-sprite" aria-hidden="true">
-            <span>◆</span>
-          </div>
-          <div>
-            <p className="kicker">Lumen Lab Field Index</p>
-            <h1>Monster Trail</h1>
-            <p className="dialogue">
-              Welcome. I am Dr. Lumen. Before this index opens, tell me the name that should be written on its first page.
-            </p>
-            <form className="name-form" onSubmit={beginJourney}>
-              <input
-                aria-label="Trainer name"
-                maxLength={12}
-                onChange={(event) => setNameInput(event.target.value)}
-                placeholder="Your name"
-                value={nameInput}
-              />
-              <button type="submit">Begin</button>
+      <main className="gb-shell intro-screen">
+        <section className="gb-screen intro-box">
+          <div className="prof-sprite">PROF</div>
+          <div className="text-stack">
+            <p className="tiny">MONSTER TRAIL</p>
+            <h1>New game</h1>
+            <p>A field professor turns on a handheld index and asks for your name.</p>
+            <form className="name-form" onSubmit={begin}>
+              <input aria-label="Trainer name" maxLength={10} onChange={(event) => setNameInput(event.target.value)} placeholder="NAME" value={nameInput} />
+              <button type="submit">A: OK</button>
             </form>
           </div>
         </section>
@@ -733,24 +776,20 @@ export default function Home() {
 
   if (state.phase === "starter") {
     return (
-      <main className="shell">
-        <section className="screen-panel">
-          <p className="kicker">Dr. Lumen</p>
-          <h1>Choose a first partner, {state.playerName}.</h1>
-          <div className="starter-grid">
-            {starters.map((id) => {
-              const item = species[id];
-              return (
-                <button className="monster-card" key={id} onClick={() => chooseStarter(id)} type="button">
-                  <MonsterSprite monster={makeMonster(id, 5)} />
-                  <strong>{item.name}</strong>
-                  <span>{item.element.toUpperCase()}</span>
-                  <small>
-                    {item.moveA} / {item.moveB}
-                  </small>
-                </button>
-              );
-            })}
+      <main className="gb-shell">
+        <section className="gb-screen starter-layout">
+          <OverworldMap chapter={chapter} state={state} />
+          <div className="dialogue-box">
+            <p>{state.message}</p>
+          </div>
+          <div className="starter-menu">
+            {starterIds.map((id) => (
+              <button key={id} onClick={() => chooseStarter(id)} type="button">
+                <MonsterMark monster={makeMonster(id, 5)} />
+                <strong>{species[id].name}</strong>
+                <span>{species[id].element.toUpperCase()}</span>
+              </button>
+            ))}
           </div>
         </section>
       </main>
@@ -759,39 +798,32 @@ export default function Home() {
 
   if (state.phase === "battle" && state.battle) {
     const battle = state.battle;
-    const player = active;
     const foe = battle.team[battle.active];
     return (
-      <main className="shell battle-screen">
-        <section className="battle-stage">
-          <div className="battle-topline">
-            <span>{battle.title}</span>
-            <span>{battle.opponentName}</span>
+      <main className="gb-shell">
+        <section className="battle-screen">
+          <div className="battle-field">
+            <Combatant monster={foe} label={`${battle.opponent} Lv.${foe.level}`} />
+            <Combatant monster={active} label={`${state.playerName} Lv.${active.level}`} player />
           </div>
-          <div className="arena">
-            <Combatant label={battle.opponentName} monster={foe} reverse />
-            <Combatant label={state.playerName} monster={player} />
+          <div className="dialogue-box battle-log">
+            {battle.log.map((line) => (
+              <p key={line}>{line}</p>
+            ))}
           </div>
-          <div className="command-panel">
-            <div className="battle-log">
-              {battle.log.map((line) => (
-                <p key={line}>{line}</p>
-              ))}
-            </div>
-            <div className="commands">
-              <button onClick={() => handleAttack(false)} type="button">
-                {player.moveA}
-              </button>
-              <button onClick={() => handleAttack(true)} type="button">
-                {player.moveB}
-              </button>
-              <button disabled={state.potions <= 0} onClick={usePotion} type="button">
-                Tonic x{state.potions}
-              </button>
-              <button disabled={!battle.canCapture || state.orbs <= 0} onClick={capture} type="button">
-                Orb x{state.orbs}
-              </button>
-            </div>
+          <div className="battle-menu">
+            <button onClick={() => handleAttack(false)} type="button">
+              FIGHT: {active.moveA}
+            </button>
+            <button onClick={() => handleAttack(true)} type="button">
+              FIGHT: {active.moveB}
+            </button>
+            <button disabled={state.tonics <= 0} onClick={useTonic} type="button">
+              BAG: Tonic x{state.tonics}
+            </button>
+            <button disabled={!battle.canCatch || state.capsules <= 0} onClick={throwCapsule} type="button">
+              ITEM: Capsule x{state.capsules}
+            </button>
           </div>
         </section>
       </main>
@@ -800,24 +832,21 @@ export default function Home() {
 
   if (state.phase === "hall") {
     return (
-      <main className="shell">
-        <section className="screen-panel hall">
-          <p className="kicker">Hall of Memory</p>
-          <h1>{state.playerName}, Summit Champion</h1>
-          <div className="party-row">
+      <main className="gb-shell">
+        <section className="gb-screen hall-screen">
+          <p className="tiny">HALL OF RECORDS</p>
+          <h1>{state.playerName} became Champion</h1>
+          <div className="hall-party">
             {state.party.map((monster) => (
-              <div className="hall-member" key={monster.uid}>
-                <MonsterSprite monster={monster} />
+              <div key={monster.uid}>
+                <MonsterMark monster={monster} />
                 <strong>{monster.name}</strong>
-                <span>Lv. {monster.level}</span>
+                <span>Lv.{monster.level}</span>
               </div>
             ))}
           </div>
-          <p className="dialogue">
-            Your Field Index records every badge, every trail, and the final summit battle. The journey is complete.
-          </p>
-          <button onClick={resetGame} type="button">
-            Start a new record
+          <button onClick={reset} type="button">
+            New record
           </button>
         </section>
       </main>
@@ -825,129 +854,136 @@ export default function Home() {
   }
 
   return (
-    <main className="shell">
-      <section className="world-grid">
-        <div className="map-panel screen-panel">
-          <div className="hud">
-            <span>{state.playerName}</span>
-            <span>
-              Badges {state.badges.length}/{locations.length}
-            </span>
-          </div>
-          <div className="pixel-map" aria-label={`${current.name} map`}>
-            {Array.from({ length: 64 }, (_, index) => (
-              <span
-                className={index % 9 === 0 ? "tile path" : index % 7 === 0 ? "tile water" : index % 5 === 0 ? "tile rock" : "tile grass"}
-                key={index}
-              />
-            ))}
-            <div className="avatar">◆</div>
-          </div>
-          <div className="location-copy">
-            <p className="kicker">{current.area}</p>
-            <h1>{current.name}</h1>
-            <p>{current.story}</p>
-          </div>
-          <div className="actions">
-            <button onClick={startWildBattle} type="button">
-              Search grass
-            </button>
-            <button onClick={startRivalBattle} type="button">
-              Rival match
-            </button>
-            <button disabled={hasLeaderDown} onClick={startLeaderBattle} type="button">
-              {hasLeaderDown ? "Sigil earned" : "Challenge warden"}
-            </button>
-            <button disabled={!hasLeaderDown || state.locationIndex >= locations.length - 1} onClick={moveNext} type="button">
-              Next town
-            </button>
-            <button disabled={!canLeague} onClick={startLeagueBattle} type="button">
-              {canLeague ? `Summit door ${Math.min(state.leagueStep + 1, league.length)}/${league.length}` : "Need all sigils"}
-            </button>
-          </div>
+    <main className="gb-shell" onKeyDown={onKeyDown} tabIndex={0}>
+      <section className="gb-frame">
+        <div className="top-bar">
+          <strong>{chapter.town}</strong>
+          <span>
+            Badges {state.badges.length}/{chapters.length}
+          </span>
         </div>
-
-        <aside className="side-panel">
-          <section className="screen-panel">
-            <div className="section-title">
-              <h2>Party</h2>
-              <span>{state.party.length}/6</span>
+        <div className="play-grid">
+          <div>
+            <OverworldMap chapter={chapter} state={state} />
+            <div className="dialogue-box">
+              <p>{state.message}</p>
             </div>
-            <div className="party-list">
-              {state.party.map((monster) => (
-                <div className="party-member" key={monster.uid}>
-                  <MonsterSprite monster={monster} small />
-                  <div>
-                    <strong>{monster.name}</strong>
-                    <span>
-                      Lv. {monster.level} · {monster.element}
-                    </span>
-                    <div className="hp-track">
-                      <span style={{ width: hpPercent(monster) }} />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-
-          <section className="screen-panel">
-            <div className="section-title">
-              <h2>Sigils</h2>
-              <span>{state.orbs} orbs</span>
-            </div>
-            <div className="badge-grid">
-              {locations.map((location) => (
-                <span className={state.badges.includes(location.leader.badge) ? "badge earned" : "badge"} key={location.leader.badge}>
-                  {location.leader.badge}
-                </span>
-              ))}
-            </div>
-          </section>
-
-          <section className="screen-panel">
-            <div className="section-title">
-              <h2>Journal</h2>
-              <button onClick={resetGame} type="button">
-                Reset
+          </div>
+          <aside className="status-menu">
+            <button onClick={() => setState((game) => ({ ...game, menuOpen: !game.menuOpen }))} type="button">
+              X: MENU
+            </button>
+            <button onClick={interact} type="button">
+              A: TALK / CHECK
+            </button>
+            <button onClick={() => startWild()} type="button">
+              SEARCH
+            </button>
+            <button onClick={startRival} type="button">
+              RIVAL
+            </button>
+            <button disabled={leaderDown} onClick={startLeader} type="button">
+              LEADER
+            </button>
+            <button disabled={!leaderDown} onClick={() => move("right")} type="button">
+              NEXT ROUTE
+            </button>
+            <button disabled={!allBadges} onClick={startLeague} type="button">
+              LEAGUE
+            </button>
+            <div className="dpad">
+              <span />
+              <button onClick={() => move("up")} type="button">
+                UP
+              </button>
+              <span />
+              <button onClick={() => move("left")} type="button">
+                LEFT
+              </button>
+              <button onClick={() => move("down")} type="button">
+                DOWN
+              </button>
+              <button onClick={() => move("right")} type="button">
+                RIGHT
               </button>
             </div>
-            <div className="journal">
-              {state.journal.map((line) => (
-                <p key={line}>{line}</p>
-              ))}
-            </div>
-          </section>
-        </aside>
+          </aside>
+        </div>
+        {state.menuOpen ? <MainMenu state={state} reset={reset} /> : null}
       </section>
     </main>
   );
 }
 
-function MonsterSprite({ monster, small = false }: { monster: Monster; small?: boolean }) {
+function OverworldMap({ chapter, state }: { chapter: Chapter; state: GameState }) {
   return (
-    <div className={small ? "sprite small" : "sprite"} style={{ "--monster-color": monster.color } as React.CSSProperties}>
-      <span>{monster.icon}</span>
+    <div className="tile-map" aria-label={`${chapter.town} map`}>
+      {chapter.map.map((row, y) =>
+        row.split("").map((tile, x) => (
+          <div className={`map-tile ${classForTile(tile)}`} key={`${x}-${y}`}>
+            {tile === "L" ? "LEAD" : tile === "D" ? "LAB" : tile === "N" ? "REN" : tile === "E" ? ">" : ""}
+          </div>
+        )),
+      )}
+      <div className={`player ${state.dir}`} style={{ gridColumn: state.x + 1, gridRow: state.y + 1 }}>
+        @
+      </div>
     </div>
   );
 }
 
-function Combatant({ label, monster, reverse = false }: { label: string; monster: Monster; reverse?: boolean }) {
+function MainMenu({ state, reset }: { state: GameState; reset: () => void }) {
   return (
-    <div className={reverse ? "combatant reverse" : "combatant"}>
-      <div className="status-card">
+    <div className="main-menu">
+      <div>
+        <h2>MONSTERS</h2>
+        {state.party.map((monster) => (
+          <div className="party-row" key={monster.uid}>
+            <MonsterMark monster={monster} />
+            <span>
+              {monster.name} Lv.{monster.level}
+            </span>
+            <div className="hp-bar">
+              <span style={{ width: hpPercent(monster) }} />
+            </div>
+          </div>
+        ))}
+      </div>
+      <div>
+        <h2>BAG</h2>
+        <p>Tonic x{state.tonics}</p>
+        <p>Capsule x{state.capsules}</p>
+        <p>Box x{state.box.length}</p>
+      </div>
+      <div>
+        <h2>BADGES</h2>
+        <p>{state.badges.length ? state.badges.join(" / ") : "None"}</p>
+      </div>
+      <button onClick={reset} type="button">
+        RESET
+      </button>
+    </div>
+  );
+}
+
+function Combatant({ monster, label, player = false }: { monster: Monster; label: string; player?: boolean }) {
+  return (
+    <div className={player ? "combatant player-side" : "combatant"}>
+      <MonsterMark monster={monster} />
+      <div className="combat-card">
         <strong>{monster.name}</strong>
-        <span>
-          {label} · Lv. {monster.level}
-        </span>
-        <div className="hp-track">
+        <span>{label}</span>
+        <div className="hp-bar">
           <span style={{ width: hpPercent(monster) }} />
         </div>
         <small>
           {monster.hp}/{monster.maxHp}
         </small>
       </div>
-      <MonsterSprite monster={monster} />
     </div>
   );
+}
+
+function MonsterMark({ monster }: { monster: Monster }) {
+  return <span className={`monster-mark ${monster.element}`}>{monster.mark}</span>;
 }

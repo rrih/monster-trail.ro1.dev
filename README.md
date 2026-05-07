@@ -2,15 +2,17 @@
 
 Browser-only retro monster RPG built with Next.js and deployed as Cloudflare Workers Assets.
 
-This project is an original game. It avoids third-party copyrighted names, maps, dialogue, characters, and assets while keeping a complete RPG arc:
+This project is an original game. It avoids third-party copyrighted names, maps, dialogue, characters, and assets while keeping a familiar handheld monster-RPG structure:
 
-- trainer name registration by Dr. Lumen
-- first partner selection
-- wild encounters, captures, party growth, and local save
-- eight town wardens and sigils
+- professor name registration
+- first partner selection from three elemental choices
+- grid-based top-down movement
+- keyboard arrows, A-style interaction, X-style menu
+- tall grass encounters, captures, party growth, and local save
+- eight badge towns and leaders
 - rival matches
-- five summit league battles
-- Hall of Memory ending screen
+- five league battles
+- Hall of Records ending screen
 
 ## Development
 
