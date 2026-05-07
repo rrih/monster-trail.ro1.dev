@@ -1,6 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "monster-trail-ro1-dev",
+  "account_id": "dd7f64477810657d38faba20f2ab460d",
   "compatibility_date": "2026-05-07",
   "assets": {
     "directory": "./out",
